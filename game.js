@@ -224,7 +224,6 @@ for (let i = 0; i < 5; i++) {
 
 function updatePlayer() {
     // Movement
-    if (keys['w'] || keys['arrowup']) player.velocityX = 0;
     if (keys['d'] || keys['arrowright']) player.x += player.speed;
     if (keys['a'] || keys['arrowleft']) player.x -= player.speed;
     if (keys[' ']) {
@@ -329,8 +328,8 @@ function updateLoot() {
 function isColliding(obj1, obj2) {
     const r1 = obj1.radius || obj1.width / 2;
     const r2 = obj2.width / 2;
-    const dx = (obj1.x || obj1.x) - obj2.x;
-    const dy = (obj1.y || obj1.y) - obj2.y;
+    const dx = obj1.x - obj2.x;
+    const dy = obj1.y - obj2.y;
     return Math.sqrt(dx * dx + dy * dy) < r1 + r2;
 }
 
