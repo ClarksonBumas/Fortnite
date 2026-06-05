@@ -66,18 +66,33 @@ let currentPlayer = 1;
 let messageEl = document.getElementById('message');
 let turnEl = document.getElementById('turn');
 
+// track last pointer for drawing aim
+let eventPointer = null;
+
 // Input
 canvas.addEventListener('pointerdown', (e)=>{
   if(anyBallMoving()) return; // only aim when balls are still
-  aiming = true; aimStart = getCanvasPos(e);
+  const pos = getCanvasPos(e);
+  const cue = balls[0];
+  // only start aiming if clicking near the cue ball
+  if(distance(pos, cue) > cue.r + 16) return;
+  aiming = true;
+  // start aim from cue's center so shots originate correctly
+  aimStart = {x: cue.x, y: cue.y};
+  eventPointer = pos;
+  currentCuePower = distance(aimStart, eventPointer);
 });
 canvas.addEventListener('pointermove', (e)=>{
+  const pos = getCanvasPos(e);
+  eventPointer = pos;
   if(!aiming) return;
-  const p = getCanvasPos(e); currentCuePower = distance(aimStart,p);
+  currentCuePower = distance(aimStart, eventPointer);
 });
 canvas.addEventListener('pointerup', (e)=>{
   if(!aiming) return;
-  const aimEnd = getCanvasPos(e); aiming=false;
+  const aimEnd = getCanvasPos(e);
+  aiming=false;
+  // direction is from cue center towards opposite of drag (pull back to shoot)
   const dir = {x: aimStart.x - aimEnd.x, y: aimStart.y - aimEnd.y};
   let power = Math.min(1, Math.sqrt(dir.x*dir.x+dir.y*dir.y)/140);
   if(e.shiftKey) power *= 0.35; // soft shot when Shift held
@@ -87,6 +102,9 @@ canvas.addEventListener('pointerup', (e)=>{
   const speed = power * 18; // tuned
   cue.vx += Math.cos(angle) * speed;
   cue.vy += Math.sin(angle) * speed;
+  // clear pointer tracking
+  eventPointer = null;
+  currentCuePower = 0;
 });
 
 function getCanvasPos(e){
@@ -169,33 +187,34 @@ function draw(){
   for(const b of balls) b.draw();
   // aim line
   if(aiming && !anyBallMoving()){
-    ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.8)'; ctx.lineWidth=2; ctx.setLineDash([8,6]);
-    ctx.beginPath(); ctx.moveTo(aimStart.x, aimStart.y);
-    const mouse = {x: aimStart.x - Math.cos(0)*0, y: aimStart.y - Math.sin(0)*0};
-    // draw towards current pointer by using last known currentCuePower
-    const angle = Math.atan2(0, -1);
-    // actually draw to pointer position
-    // cheat: show line from cue ball center to aim cursor (we tracked currentCuePower only)
-    ctx.lineTo(aimStart.x - (currentCuePower*2)*( (eventPointer && eventPointer.x) ? (aimStart.x-eventPointer.x)/Math.max(1,currentCuePower) : 0 ),
-                aimStart.y - (currentCuePower*2)*( (eventPointer && eventPointer.y) ? (aimStart.y-eventPointer.y)/Math.max(1,currentCuePower) : 0 ));
-    ctx.stroke(); ctx.restore();
+    const cue = balls[0];
+    const pointer = eventPointer || aimStart;
+    ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=2; ctx.setLineDash([8,6]);
+    ctx.beginPath(); ctx.moveTo(cue.x, cue.y);
+    // clamp pointer so line length matches currentCuePower for visual clarity
+    const maxLen = 140; // same scaling as power calc
+    let dx = pointer.x - cue.x, dy = pointer.y - cue.y;
+    const len = Math.hypot(dx,dy);
+    if(len > maxLen){ dx = dx * (maxLen/len); dy = dy * (maxLen/len); }
+    ctx.lineTo(cue.x + dx, cue.y + dy);
+    ctx.stroke();
+
+    // draw power indicator (small circle at pointer)
+    ctx.beginPath(); ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.arc(cue.x + dx, cue.y + dy, 6, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
   }
 }
-
-// track last pointer for drawing aim
-let eventPointer = null;
-canvas.addEventListener('pointermove', (e)=>{ eventPointer = getCanvasPos(e); });
-canvas.addEventListener('pointerout', ()=>{ eventPointer = null; });
 
 // main loop
 function loop(){ step(); draw(); updateUI(); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 
 function updateUI(){
-  const potted = balls.filter(b=>b.potted && b.number===0).length;
+  // count potted non-cue balls (how many balls sunk)
+  const pottedCount = balls.filter(b=>b.potted && b.number!==0).length;
   turnEl.textContent = `Turn: Player ${currentPlayer}`;
   if(anyBallMoving()) messageEl.textContent = 'Balls moving...';
-  else messageEl.textContent = 'Click & drag to aim; release to shoot. Hold Shift for a soft shot.';
+  else messageEl.textContent = `Click & drag the cue ball to aim; release to shoot. Sunk: ${pottedCount}`;
 }
 
 // expose simple API for debugging
